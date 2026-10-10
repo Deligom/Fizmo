@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fizmo Sarkaç Laboratuvarı</title>
+<meta name="description" content="İpin boyunu, kütleyi, açıyı ve yerçekimini değiştirerek sarkacın periyodunu keşfet.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed 3D lab bench; lesson card floats left, instrument panel right,
+   live θ–t trace + energy meters along the bottom. On phones everything stacks under the stage. */
+:root {
+  --ink: #0b1118;          /* lab at night: blue-biased near-black */
+  --panel: #121b26;        /* instrument panels */
+  --panel-2: #182433;      /* raised controls */
+  --line: #26364a;         /* hairlines, slider tracks */
+  --fg: #e6edf5;           /* primary text */
+  --muted: #8a9bb0;        /* secondary text */
+  --brass: #d9a441;        /* the bob, the accent */
+  --brass-soft: #d9a44126;
+  --kin: #ee6b73;          /* kinetic energy, velocity */
+  --pot: #5fa8e8;          /* potential energy, weight */
+  --ok: #6cc59a;           /* completed experiments */
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+  --gutter: 16px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--fg);
+  font: 15px/1.5 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.app { position: relative; height: 100%; overflow: hidden; }
+#stage { position: absolute; inset: 0; touch-action: none; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+
+.panel {
+  position: absolute;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  z-index: 2;
+}
+.eyebrow {
+  font: 600 11px/1 var(--font-data);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+h1 {
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 125;
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: -.01em;
+  margin: 8px 0 10px;
+  text-wrap: balance;
+}
+h1 em { font-style: normal; color: var(--brass); }
+h2 {
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 110;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin: 0;
+}
+p { margin: 0; }
+.lede { color: var(--muted); font-size: 14px; max-width: 34ch; }
+
+/* lesson card */
+.lesson { top: 20px; left: 20px; width: 330px; max-height: calc(100% - 220px); overflow-y: auto; display: grid; gap: 16px; }
+.formula {
+  font-family: var(--font-data);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+.formula .big { font-size: 20px; color: var(--fg); }
+.formula .big b { color: var(--brass); font-weight: 500; }
+.formula .sub { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.experiments { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.experiments li {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.experiments .tick {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid var(--line);
+  display: grid; place-items: center;
+  font: 600 12px/1 var(--font-data);
+  color: var(--muted);
+}
+.experiments li.done { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.experiments li.done .tick { background: var(--ok); border-color: var(--ok); color: var(--ink); }
+.experiments .task { font-weight: 600; font-size: 14px; }
+.experiments .reveal { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.experiments li:not(.done) .reveal { display: none; }
+.experiments li.done .reveal { color: var(--fg); opacity: .85; }
+
+/* instrument panel */
+.controls { top: 20px; right: 20px; width: 290px; display: grid; gap: 16px; max-height: calc(100% - 220px); overflow-y: auto; }
+.field { display: grid; gap: 6px; }
+.field-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.field label, .field .label { font-size: 13px; font-weight: 600; }
+.field output { font: 500 13px/1 var(--font-data); color: var(--brass); font-variant-numeric: tabular-nums; }
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 28px; background: transparent; margin: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--brass) var(--fill, 50%), var(--line) var(--fill, 50%)); }
+input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line); }
+input[type="range"]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--brass); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--fg); border: 3px solid var(--brass);
+  margin-top: -7px; cursor: grab;
+}
+input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--fg); border: 3px solid var(--brass); cursor: grab; }
+.segmented { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
+.segmented.three { grid-template-columns: repeat(3, 1fr); }
+.segmented button {
+  border: 0; background: transparent; border-radius: 6px;
+  padding: 7px 4px; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--muted);
+  display: grid; gap: 1px; line-height: 1.15;
+}
+.segmented button small { font: 400 10.5px/1 var(--font-data); opacity: .8; }
+.segmented button[aria-pressed="true"] { background: var(--fg); color: var(--ink); }
+.row { display: flex; gap: 8px; }
+.btn {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 600; font-size: 14px;
+  cursor: pointer;
+}
+.btn.primary { background: var(--brass); color: var(--ink); border-color: var(--brass); }
+.btn:hover { filter: brightness(1.08); }
+.toggle { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.toggle input { width: 16px; height: 16px; accent-color: var(--brass); }
+
+/* bottom readouts */
+.dock { left: 20px; right: 20px; bottom: 20px; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 14px 18px; }
+.trace { min-width: 0; display: grid; gap: 6px; }
+.trace canvas { width: 100%; height: 110px; display: block; }
+.meters { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.meter { display: grid; gap: 4px; }
+.meter-head { display: flex; justify-content: space-between; font-size: 12.5px; }
+.meter-head span:last-child { font-family: var(--font-data); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; border-radius: 4px; }
+.bar.kin i { background: var(--kin); }
+.bar.pot i { background: var(--pot); }
+.bar.tot i { background: var(--fg); }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; align-content: start; min-width: 0; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font: 500 20px/1.15 var(--font-data); font-variant-numeric: tabular-nums; }
+.stat .v small { font-size: 12px; color: var(--muted); margin-left: 2px; }
+.stat.hl .v { color: var(--brass); }
+.stat .d { font: 400 11.5px/1.3 var(--font-data); color: var(--muted); margin-top: 2px; }
+
+/* 3D callouts */
+.callouts { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.callout {
+  position: absolute; left: 0; top: 0;
+  font: 500 11.5px/1 var(--font-data);
+  white-space: nowrap;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 75%, transparent);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  transform: translate(-50%, -50%);
+  will-change: transform;
+}
+.callout.brass { border-color: var(--brass); color: var(--brass); }
+.callout.hint { background: var(--brass); color: var(--ink); border-color: var(--brass); font-weight: 600; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; background: currentColor; }
+.legend .w { color: var(--pot); }
+.legend .r { color: var(--brass); }
+.legend .v { color: var(--kin); }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font: 500 13px var(--font-data); z-index: 0; }
+
+/* phones and small tablets: stage on top, panels flow below */
+.stage-title { display: none; }
+@media (max-width: 1080px) {
+  .app { height: auto; overflow: visible; display: flex; flex-direction: column; gap: 12px; padding-bottom: 24px; }
+  /* the bench stays pinned while the controls scroll underneath */
+  #stage { position: sticky; inset: auto; top: env(safe-area-inset-top, 0px); height: 46svh; min-height: 300px; order: 1; z-index: 3; box-shadow: 0 1px 0 var(--line); }
+  .stage-title { display: block; position: absolute; top: 12px; left: var(--gutter); z-index: 2; pointer-events: none; }
+  .stage-title h1 { font-size: 22px; margin: 4px 0 0; }
+  .lesson-head { display: none; }
+  .panel { position: static; width: auto; max-height: none; margin-inline: var(--gutter); backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--panel); }
+  .lesson { order: 2; }
+  .controls { order: 3; }
+  .dock { order: 4; grid-template-columns: 1fr; }
+  h1 { font-size: 28px; }
+  .lede { max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="stage" aria-label="Sarkacın 3B görünümü. Topu sürükleyerek açıyı ayarla, boş alanı sürükleyerek kamerayı döndür.">
+    <div class="loading" id="loading">Laboratuvar hazırlanıyor…</div>
+    <div class="stage-title" aria-hidden="true"><p class="eyebrow">Fizmo · Deney 01</p><h1>Basit <em>Sarkaç</em></h1></div>
+    <div class="callouts" id="callouts" aria-hidden="true"></div>
+  </div>
+
+  <section class="panel lesson" aria-labelledby="title">
+    <div class="lesson-head-wrap">
+      <div class="lesson-head">
+      <p class="eyebrow">Fizmo · Deney 01</p>
+      <h1 id="title">Basit <em>Sarkaç</em></h1>
+      </div>
+      <p class="lede">Bir sarkacın bir gidip gelmesi ne kadar sürer? Topu tut, çek ve bırak. Sonra aşağıdaki deneyleri yap ve hangi şeyin süreyi gerçekten değiştirdiğini kendin bul.</p>
+    </div>
+    <div class="formula" aria-live="polite">
+      <span class="big">T = 2π √(<b>L</b> / <b>g</b>)</span>
+      <span class="sub" id="formulaLive">T = 2π √(1.00 / 9.81) = 2.006 s</span>
+    </div>
+    <div style="display:grid; gap:10px">
+      <h2>Deneyler</h2>
+      <ol class="experiments" id="experiments">
+        <li data-exp="mass"><span class="tick">1</span><div><p class="task">Kütleyi en az 3 katına çıkar.</p><p class="reveal">Periyot değişmedi. Ağır top daha çok çekilir ama hızlanmaya da o kadar direnir; ikisi birbirini götürür.</p></div></li>
+        <li data-exp="length"><span class="tick">2</span><div><p class="task">İp boyunu 4 kat değiştir (örneğin 0.50 m → 2.00 m).</p><p class="reveal">4 kat uzun ip, 2 kat uzun periyot verir. T, ip uzunluğunun karekökü ile değişir.</p></div></li>
+        <li data-exp="moon"><span class="tick">3</span><div><p class="task">Sarkacı Ay'a götür.</p><p class="reveal">Ay'da g yaklaşık 6 kat küçük, bu yüzden periyot √6 ≈ 2.45 kat uzun.</p></div></li>
+        <li data-exp="angle"><span class="tick">4</span><div><p class="task">Topu 60°'den fazla çekip bırak.</p><p class="reveal">Formül küçük açılar için yazılmış. Büyük açıda gerçek periyot formülden biraz uzun çıkar; ölçülen değere bak.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="panel controls" aria-label="Deney ayarları">
+    <div class="field">
+      <div class="field-head"><label for="len">İp uzunluğu L</label><output id="lenOut" for="len">1.00 m</output></div>
+      <input type="range" id="len" min="0.25" max="2" step="0.05" value="1">
+    </div>
+    <div class="field">
+      <div class="field-head"><label for="mass">Kütle m</label><output id="massOut" for="mass">1.0 kg</output></div>
+      <input type="range" id="mass" min="0.2" max="5" step="0.1" value="1">
+    </div>
+    <div class="field">
+      <div class="field-head"><label for="angle">Bırakma açısı θ₀</label><output id="angleOut" for="angle">20°</output></div>
+      <input type="range" id="angle" min="5" max="85" step="1" value="20">
+    </div>
+    <div class="field">
+      <span class="label" id="gLabel">Yerçekimi g</span>
+      <div class="segmented" role="group" aria-labelledby="gLabel" id="gravity">
+        <button type="button" data-g="9.81" aria-pressed="true">Dünya<small>9.81</small></button>
+        <button type="button" data-g="1.62" aria-pressed="false">Ay<small>1.62</small></button>
+        <button type="button" data-g="3.71" aria-pressed="false">Mars<small>3.71</small></button>
+        <button type="button" data-g="24.79" aria-pressed="false">Jüpiter<small>24.8</small></button>
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-head"><label for="damp">Hava sürtünmesi</label><output id="dampOut" for="damp">yok</output></div>
+      <input type="range" id="damp" min="0" max="0.5" step="0.01" value="0">
+    </div>
+    <div class="field">
+      <span class="label" id="speedLabel">Zaman hızı</span>
+      <div class="segmented three" role="group" aria-labelledby="speedLabel" id="speed">
+        <button type="button" data-s="0.25" aria-pressed="false">¼×</button>
+        <button type="button" data-s="0.5" aria-pressed="false">½×</button>
+        <button type="button" data-s="1" aria-pressed="true">1×</button>
+      </div>
+    </div>
+    <label class="toggle"><input type="checkbox" id="forces" checked> Kuvvet oklarını göster</label>
+    <div class="legend" id="legend"><span class="w">Ağırlık mg</span><span class="r">Geri çağıran</span><span class="v">Hız</span></div>
+    <div class="row">
+      <button type="button" class="btn primary" id="play">Duraklat</button>
+      <button type="button" class="btn" id="reset">Baştan bırak</button>
+    </div>
+  </section>
+
+  <section class="panel dock" aria-label="Ölçümler">
+    <div class="trace">
+      <div class="field-head"><h2>Açı – zaman</h2><span class="eyebrow" id="traceNote">son 10 s</span></div>
+      <canvas id="trace" aria-label="Sarkaç açısının zamana göre grafiği"></canvas>
+    </div>
+    <div class="meters">
+      <h2>Enerji</h2>
+      <div class="meter"><div class="meter-head"><span>Kinetik ½mv²</span><span id="keOut">0.00 J</span></div><div class="bar kin"><i id="keBar"></i></div></div>
+      <div class="meter"><div class="meter-head"><span>Potansiyel mgh</span><span id="peOut">0.00 J</span></div><div class="bar pot"><i id="peBar"></i></div></div>
+      <div class="meter"><div class="meter-head"><span>Toplam</span><span id="teOut">0.00 J</span></div><div class="bar tot"><i id="teBar"></i></div></div>
+    </div>
+    <div class="stats">
+      <div class="stat hl"><div class="k">Ölçülen periyot</div><div class="v" id="tMeas">–</div><div class="d" id="tDiff">bir tam salınım bekleniyor</div></div>
+      <div class="stat"><div class="k">Formül (küçük açı)</div><div class="v" id="tTheory">2.006<small>s</small></div></div>
+      <div class="stat"><div class="k">Anlık açı θ</div><div class="v" id="thetaOut">0.0<small>°</small></div></div>
+      <div class="stat"><div class="k">Hız v</div><div class="v" id="vOut">0.00<small>m/s</small></div></div>
+    </div>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const DEG = Math.PI / 180;
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- physics state ---------- */
+const P = {
+  L: 1, m: 1, g: 9.81, theta0: 20 * DEG, damping: 0,
+  theta: 20 * DEG, omega: 0, t: 0,
+  running: true, timeScale: 1, dragging: false,
+};
+const PIVOT = new THREE.Vector3(0, 2.55, 0);
+
+// θ'' = -(g/L) sin θ − γ θ'   (exact, not the small-angle version)
+function accel(theta, omega) { return -(P.g / P.L) * Math.sin(theta) - P.damping * omega; }
+function rk4(dt) {
+  const { theta: th, omega: om } = P;
+  const k1t = om, k1o = accel(th, om);
+  const k2t = om + 0.5 * dt * k1o, k2o = accel(th + 0.5 * dt * k1t, om + 0.5 * dt * k1o);
+  const k3t = om + 0.5 * dt * k2o, k3o = accel(th + 0.5 * dt * k2t, om + 0.5 * dt * k2o);
+  const k4t = om + dt * k3o, k4o = accel(th + dt * k3t, om + dt * k3o);
+  P.theta = th + (dt / 6) * (k1t + 2 * k2t + 2 * k3t + k4t);
+  P.omega = om + (dt / 6) * (k1o + 2 * k2o + 2 * k3o + k4o);
+}
+
+// period from successive upward zero crossings (θ goes − → +)
+let lastCross = null, measured = null;
+function stepPhysics(dt) {
+  const prev = P.theta;
+  const tPrev = P.t;
+  rk4(dt);
+  P.t += dt;
+  if (prev < 0 && P.theta >= 0) {
+    const tc = tPrev + dt * (-prev / (P.theta - prev));
+    if (lastCross !== null) measured = tc - lastCross;
+    lastCross = tc;
+  }
+}
+const theoryPeriod = () => 2 * Math.PI * Math.sqrt(P.L / P.g);
+const bobRadius = () => 0.06 * Math.cbrt(P.m) + 0.02;
+
+function release(theta0 = P.theta0) {
+  P.theta0 = theta0;
+  P.theta = theta0; P.omega = 0; P.t = 0;
+  lastCross = null; measured = null;
+  traceData.length = 0;
+  trail.reset();
+  E0 = energies().total || 1;
+}
+function energies() {
+  const h = P.L * (1 - Math.cos(P.theta));
+  const v = Math.abs(P.L * P.omega);
+  const pe = P.m * P.g * h, ke = 0.5 * P.m * v * v;
+  return { pe, ke, total: pe + ke, v };
+}
+let E0 = 1;
+
+/* ---------- renderer & scene ---------- */
+const stage = $("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+stage.appendChild(renderer.domElement);
+$("loading").remove();
+
+const scene = new THREE.Scene();
+const inkColor = new THREE.Color(css("--ink"));
+scene.background = inkColor;
+scene.fog = new THREE.Fog(inkColor, 9, 20);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 50);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 1.45, 0);
+controls.minDistance = 2.2;
+controls.maxDistance = 9;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.enablePan = false;
+
+scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x1a120a, 0.55));
+const key = new THREE.DirectionalLight(0xfff1dc, 2.2);
+key.position.set(2.5, 5, 3.5);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 0.5, far: 15 });
+key.shadow.bias = -0.0005;
+scene.add(key);
+const rim = new THREE.PointLight(0x5fa8e8, 6, 8, 2);
+rim.position.set(-2.4, 2.2, -1.6);
+scene.add(rim);
+
+// floor with fine grid
+const floor = new THREE.Mesh(new THREE.CircleGeometry(9, 64), new THREE.MeshStandardMaterial({ color: 0x111a24, roughness: 0.92 }));
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+const grid = new THREE.GridHelper(12, 48, 0x24344a, 0x172231);
+grid.position.y = 0.002;
+scene.add(grid);
+
+// lab stand
+const metal = new THREE.MeshStandardMaterial({ color: 0x9aa7b6, metalness: 0.85, roughness: 0.32 });
+const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2a3442, metalness: 0.6, roughness: 0.45 });
+const base = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 0.7), darkMetal);
+base.position.set(-0.55, 0.04, -0.15); base.castShadow = base.receiveShadow = true;
+scene.add(base);
+const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.75, 24), metal);
+post.position.set(-1.1, 1.375, -0.15); post.castShadow = true;
+scene.add(post);
+const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.2, 20), metal);
+arm.rotation.z = Math.PI / 2;
+arm.position.set(-0.52, PIVOT.y + 0.02, -0.15); arm.castShadow = true;
+scene.add(arm);
+const clamp = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), darkMetal);
+clamp.position.set(-1.1, PIVOT.y + 0.02, -0.15);
+scene.add(clamp);
+const pivotBlock = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.32), darkMetal);
+pivotBlock.position.copy(PIVOT).add(new THREE.Vector3(0, 0.02, -0.06));
+scene.add(pivotBlock);
+const pin = new THREE.Mesh(new THREE.SphereGeometry(0.018, 16, 12), metal);
+pin.position.copy(PIVOT);
+scene.add(pin);
+
+// protractor behind the swing plane
+const protractor = new THREE.Group();
+protractor.position.copy(PIVOT).setZ(-0.04);
+scene.add(protractor);
+const tickPts = [];
+for (let a = -90; a <= 90; a += 5) {
+  const r0 = a % 30 === 0 ? 0.36 : a % 10 === 0 ? 0.4 : 0.42;
+  const s = Math.sin(a * DEG), c = -Math.cos(a * DEG);
+  tickPts.push(new THREE.Vector3(s * r0, c * r0, 0), new THREE.Vector3(s * 0.45, c * 0.45, 0));
+}
+protractor.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(tickPts), new THREE.LineBasicMaterial({ color: 0x3a4f69 })));
+const plumb = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -2.2, 0)]),
+  new THREE.LineDashedMaterial({ color: 0x3a4f69, dashSize: 0.04, gapSize: 0.04 }));
+plumb.computeLineDistances();
+protractor.add(plumb);
+const wedgeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(css("--brass")), transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false });
+let wedge = new THREE.Mesh(new THREE.BufferGeometry(), wedgeMat);
+protractor.add(wedge);
+function updateWedge(theta) {
+  wedge.geometry.dispose();
+  // CircleGeometry starts on +x and turns counter-clockwise; straight down is −90°
+  const start = -Math.PI / 2, len = theta;
+  wedge.geometry = new THREE.CircleGeometry(0.34, 40, len >= 0 ? start : start + len, Math.max(Math.abs(len), 0.0001));
+}
+
+// string & bob
+const stringGeo = new THREE.BufferGeometry().setFromPoints([PIVOT.clone(), PIVOT.clone()]);
+const string = new THREE.Line(stringGeo, new THREE.LineBasicMaterial({ color: 0xd8dde4 }));
+scene.add(string);
+const brass = new THREE.Color(css("--brass"));
+const bobMat = new THREE.MeshStandardMaterial({ color: brass, metalness: 1, roughness: 0.22, emissive: brass, emissiveIntensity: 0 });
+const bob = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), bobMat);
+bob.castShadow = true;
+scene.add(bob);
+const hook = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1, 8), metal);
+scene.add(hook);
+
+// fading trail
+const trail = (() => {
+  const N = 140;
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 }));
+  line.frustumCulled = false;
+  scene.add(line);
+  const pts = [];
+  return {
+    push(v) {
+      pts.push(v.clone()); if (pts.length > N) pts.shift();
+      for (let i = 0; i < N; i++) {
+        const p = pts[Math.min(i, pts.length - 1)] || v;
+        pos.set([p.x, p.y, p.z], i * 3);
+        const k = pts.length ? Math.min(i, pts.length - 1) / N : 0;
+        col.set([brass.r * k, brass.g * k, brass.b * k], i * 3);
+      }
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.color.needsUpdate = true;
+      geo.setDrawRange(0, Math.max(pts.length, 1));
+    },
+    reset() { pts.length = 0; geo.setDrawRange(0, 0); },
+  };
+})();
+
+// force arrows
+const arrows = {
+  weight: new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(), 1, new THREE.Color(css("--pot")), 0.07, 0.045),
+  restore: new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1, brass, 0.07, 0.045),
+  velocity: new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1, new THREE.Color(css("--kin")), 0.07, 0.045),
+};
+Object.values(arrows).forEach((a) => { a.position.z = 0.0; scene.add(a); });
+const ARROW_SCALE = 0.32;
+
+/* ---------- HTML callouts pinned to 3D points ---------- */
+const calloutLayer = $("callouts");
+function makeCallout(cls) { const el = document.createElement("div"); el.className = "callout " + cls; calloutLayer.appendChild(el); return el; }
+const cPivot = makeCallout(""); cPivot.textContent = "Asılma noktası";
+const cLen = makeCallout("brass");
+const cMass = makeCallout("");
+const cHint = makeCallout("hint"); cHint.textContent = "Topu tut ve çek";
+let hintVisible = true;
+const tmp = new THREE.Vector3();
+const anchor = new THREE.Vector3();
+function place(el, world, dx = 0, dy = 0) {
+  tmp.copy(world).project(camera);
+  const r = stage.getBoundingClientRect();
+  const half = el.offsetWidth / 2 + 6;
+  const x = THREE.MathUtils.clamp((tmp.x * 0.5 + 0.5) * r.width + dx, half, Math.max(half, r.width - half));
+  const y = (-tmp.y * 0.5 + 0.5) * r.height + dy;
+  const hidden = tmp.z > 1 || y < 0 || y > r.height;
+  el.style.opacity = hidden ? 0 : 1;
+  el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+}
+
+/* ---------- drag the bob to set the angle ---------- */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const swingPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+const hit = new THREE.Vector3();
+function toNdc(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+}
+function angleFromPointer(e) {
+  toNdc(e);
+  raycaster.setFromCamera(ndc, camera);
+  if (!raycaster.ray.intersectPlane(swingPlane, hit)) return null;
+  const th = Math.atan2(hit.x - PIVOT.x, PIVOT.y - hit.y);
+  return THREE.MathUtils.clamp(th, -85 * DEG, 85 * DEG);
+}
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  intro = 1;
+  toNdc(e);
+  raycaster.setFromCamera(ndc, camera);
+  const s = new THREE.Sphere(bob.position, Math.max(bobRadius() * 1.8, 0.12));
+  if (!raycaster.ray.intersectsSphere(s)) return;
+  P.dragging = true;
+  controls.enabled = false;
+  renderer.domElement.setPointerCapture(e.pointerId);
+  hintVisible = false;
+  e.preventDefault();
+}, { capture: true });
+renderer.domElement.addEventListener("pointermove", (e) => {
+  if (P.dragging) {
+    const th = angleFromPointer(e);
+    if (th !== null) { P.theta = th; P.omega = 0; }
+    return;
+  }
+  // hover feedback
+  if (e.pointerType === "mouse") {
+    toNdc(e); raycaster.setFromCamera(ndc, camera);
+    const over = raycaster.ray.intersectsSphere(new THREE.Sphere(bob.position, Math.max(bobRadius() * 1.8, 0.12)));
+    renderer.domElement.style.cursor = over ? "grab" : "";
+    bobMat.emissiveIntensity = over ? 0.25 : 0;
+  }
+});
+function endDrag() {
+  if (!P.dragging) return;
+  P.dragging = false;
+  controls.enabled = true;
+  const deg = Math.round(Math.abs(P.theta) / DEG);
+  if (deg >= 1) {
+    angleIn.value = THREE.MathUtils.clamp(deg, 5, 85);
+    syncOutputs();
+    release(P.theta);
+    if (deg > 60) done("angle");
+  }
+  setRunning(true);
+}
+renderer.domElement.addEventListener("pointerup", endDrag);
+renderer.domElement.addEventListener("pointercancel", endDrag);
+
+/* ---------- controls ---------- */
+const lenIn = $("len"), massIn = $("mass"), angleIn = $("angle"), dampIn = $("damp");
+const seen = { Lmin: P.L, Lmax: P.L, mMin: P.m, mMax: P.m };
+function fill(input) {
+  const f = ((input.value - input.min) / (input.max - input.min)) * 100;
+  input.style.setProperty("--fill", f + "%");
+}
+function syncOutputs() {
+  $("lenOut").textContent = (+lenIn.value).toFixed(2) + " m";
+  $("massOut").textContent = (+massIn.value).toFixed(1) + " kg";
+  $("angleOut").textContent = angleIn.value + "°";
+  const d = +dampIn.value;
+  $("dampOut").textContent = d === 0 ? "yok" : d < 0.15 ? "az" : d < 0.3 ? "orta" : "çok";
+  [lenIn, massIn, angleIn, dampIn].forEach(fill);
+}
+lenIn.addEventListener("input", () => {
+  P.L = +lenIn.value; syncOutputs(); release(P.theta0);
+  seen.Lmin = Math.min(seen.Lmin, P.L); seen.Lmax = Math.max(seen.Lmax, P.L);
+  if (seen.Lmax / seen.Lmin >= 3.95) done("length");
+});
+massIn.addEventListener("input", () => {
+  // mass is not in the equation of motion, so the swing carries on; only the energies scale
+  const m = +massIn.value;
+  E0 *= m / P.m;
+  P.m = m; syncOutputs();
+  seen.mMin = Math.min(seen.mMin, m); seen.mMax = Math.max(seen.mMax, m);
+  if (seen.mMax / seen.mMin >= 2.95) done("mass");
+});
+angleIn.addEventListener("input", () => {
+  syncOutputs(); release(+angleIn.value * DEG);
+  if (+angleIn.value > 60) done("angle");
+});
+dampIn.addEventListener("input", () => { P.damping = +dampIn.value; syncOutputs(); });
+function pressGroup(group, btn) { group.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b === btn ? "true" : "false")); }
+$("gravity").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  pressGroup($("gravity"), b);
+  P.g = +b.dataset.g; release(P.theta0);
+  if (P.g < 2) done("moon");
+});
+$("speed").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  pressGroup($("speed"), b);
+  P.timeScale = +b.dataset.s;
+});
+function setRunning(on) { P.running = on; $("play").textContent = on ? "Duraklat" : "Devam et"; }
+$("play").addEventListener("click", () => setRunning(!P.running));
+$("reset").addEventListener("click", () => { release(+angleIn.value * DEG); setRunning(true); });
+const forcesIn = $("forces");
+forcesIn.addEventListener("change", () => { $("legend").hidden = !forcesIn.checked; });
+
+function done(id) {
+  const li = document.querySelector(`[data-exp="${id}"]`);
+  if (!li || li.classList.contains("done")) return;
+  li.classList.add("done");
+  li.querySelector(".tick").textContent = "✓";
+}
+
+/* ---------- θ–t trace (2D canvas) ---------- */
+const traceCanvas = $("trace");
+const tctx = traceCanvas.getContext("2d");
+const traceData = [];
+const WINDOW = 10;
+const C = { line: css("--line"), muted: css("--muted"), brass: css("--brass"), fg: css("--fg") };
+function drawTrace() {
+  const dpr = Math.min(devicePixelRatio, 2);
+  const w = traceCanvas.clientWidth, h = traceCanvas.clientHeight;
+  if (traceCanvas.width !== Math.round(w * dpr) || traceCanvas.height !== Math.round(h * dpr)) {
+    traceCanvas.width = Math.round(w * dpr); traceCanvas.height = Math.round(h * dpr);
+  }
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tctx.clearRect(0, 0, w, h);
+  const padL = 34, padB = 16, padT = 6;
+  const pw = w - padL - 16, ph = h - padB - padT;
+  const maxDeg = Math.max(10, Math.ceil(Math.abs(P.theta0) / DEG / 10) * 10);
+  const yOf = (deg) => padT + ph / 2 - (deg / maxDeg) * (ph / 2);
+  const t1 = Math.max(P.t, WINDOW), t0 = t1 - WINDOW;
+  const xOf = (t) => padL + ((t - t0) / WINDOW) * pw;
+  tctx.font = "10.5px " + css("--font-data");
+  tctx.textBaseline = "middle";
+  tctx.lineWidth = 1;
+  // horizontal gridlines at −max, 0, +max
+  [maxDeg, 0, -maxDeg].forEach((d) => {
+    tctx.strokeStyle = C.line; tctx.globalAlpha = d === 0 ? 1 : 0.6;
+    tctx.beginPath(); tctx.moveTo(padL, yOf(d)); tctx.lineTo(padL + pw, yOf(d)); tctx.stroke();
+    tctx.globalAlpha = 1; tctx.fillStyle = C.muted; tctx.textAlign = "right";
+    tctx.fillText((d > 0 ? "+" : "") + d + "°", padL - 6, yOf(d));
+  });
+  // seconds ticks
+  tctx.textAlign = "center"; tctx.textBaseline = "alphabetic";
+  for (let s = Math.ceil(t0); s <= t1; s += 2) {
+    tctx.fillStyle = C.muted;
+    tctx.fillText(s + " s", xOf(s), h - 2);
+  }
+  // the curve
+  tctx.strokeStyle = C.brass; tctx.lineWidth = 2; tctx.lineJoin = "round";
+  tctx.beginPath();
+  let started = false;
+  for (const [t, deg] of traceData) {
+    if (t < t0) continue;
+    const x = xOf(t), y = yOf(deg);
+    if (!started) { tctx.moveTo(x, y); started = true; } else tctx.lineTo(x, y);
+  }
+  tctx.stroke();
+  // endpoint
+  if (traceData.length) {
+    const [t, deg] = traceData[traceData.length - 1];
+    tctx.fillStyle = C.fg;
+    tctx.beginPath(); tctx.arc(xOf(t), yOf(deg), 3, 0, Math.PI * 2); tctx.fill();
+  }
+}
+
+/* ---------- per-frame updates ---------- */
+const bobPos = new THREE.Vector3();
+const tangent = new THREE.Vector3();
+function updateScene() {
+  const r = bobRadius();
+  const s = Math.sin(P.theta), c = Math.cos(P.theta);
+  bobPos.set(PIVOT.x + P.L * s, PIVOT.y - P.L * c, 0);
+  bob.position.copy(bobPos);
+  bob.scale.setScalar(r);
+  // string ends at the hook on top of the bob
+  const top = bobPos.clone().add(new THREE.Vector3(-s, c, 0).multiplyScalar(r + 0.02));
+  stringGeo.attributes.position.setXYZ(1, top.x, top.y, top.z);
+  stringGeo.attributes.position.needsUpdate = true;
+  hook.position.copy(bobPos).add(new THREE.Vector3(-s, c, 0).multiplyScalar(r + 0.01));
+  hook.scale.set(1, 0.03, 1);
+  hook.rotation.z = P.theta;
+  updateWedge(P.theta);
+
+  // forces: weight mg (down), restoring component mg·sinθ along the arc, velocity Lω
+  const show = forcesIn.checked;
+  Object.values(arrows).forEach((a) => (a.visible = show));
+  if (show) {
+    const gScale = (P.g / 9.81) * ARROW_SCALE;
+    arrows.weight.position.copy(bobPos);
+    arrows.weight.setLength(Math.max(gScale, 0.08), 0.06, 0.04);
+    tangent.set(c, s, 0); // direction of increasing θ
+    const restore = -Math.sin(P.theta) * gScale;
+    arrows.restore.position.copy(bobPos);
+    arrows.restore.setDirection(tangent.clone().multiplyScalar(Math.sign(restore) || 1));
+    arrows.restore.visible = Math.abs(restore) > 0.015;
+    if (arrows.restore.visible) arrows.restore.setLength(Math.abs(restore) + r, 0.06, 0.04);
+    const v = P.L * P.omega;
+    arrows.velocity.position.copy(bobPos);
+    arrows.velocity.setDirection(tangent.clone().multiplyScalar(Math.sign(v) || 1));
+    arrows.velocity.visible = Math.abs(v) > 0.03;
+    if (arrows.velocity.visible) arrows.velocity.setLength(Math.min(Math.abs(v) * 0.22, 1.1) + r, 0.06, 0.04);
+  }
+
+  // callouts
+  place(cPivot, PIVOT, 72, -20);
+  cLen.textContent = `L = ${P.L.toFixed(2)} m`;
+  place(cLen, PIVOT.clone().lerp(bobPos, 0.5), P.theta >= 0 ? -56 : 56, 0);
+  cMass.textContent = `m = ${P.m.toFixed(1)} kg`;
+  const below = r + 0.07 + (show ? Math.max((P.g / 9.81) * ARROW_SCALE, 0.08) : 0);
+  place(cMass, anchor.copy(bobPos).setY(bobPos.y - below), 0, 10);
+  cHint.hidden = !hintVisible;
+  if (hintVisible) place(cHint, anchor.copy(bobPos).setX(bobPos.x + r + 0.08), 62, 0);
+}
+
+function updateReadouts() {
+  const e = energies();
+  const ref = Math.max(E0, 1e-6);
+  $("keBar").style.width = Math.min(100, (e.ke / ref) * 100) + "%";
+  $("peBar").style.width = Math.min(100, (e.pe / ref) * 100) + "%";
+  $("teBar").style.width = Math.min(100, (e.total / ref) * 100) + "%";
+  $("keOut").textContent = e.ke.toFixed(2) + " J";
+  $("peOut").textContent = e.pe.toFixed(2) + " J";
+  $("teOut").textContent = e.total.toFixed(2) + " J";
+  $("thetaOut").innerHTML = (P.theta / DEG).toFixed(1) + "<small>°</small>";
+  $("vOut").innerHTML = e.v.toFixed(2) + "<small>m/s</small>";
+  const T = theoryPeriod();
+  $("tTheory").innerHTML = T.toFixed(3) + "<small>s</small>";
+  $("tMeas").innerHTML = measured ? measured.toFixed(3) + "<small>s</small>" : "–";
+  if (measured) {
+    const diff = ((measured - T) / T) * 100;
+    $("tDiff").textContent = Math.abs(diff) < 0.05 ? "formülle aynı" : `formülden ${diff > 0 ? "+" : "−"}${Math.abs(diff).toFixed(1)}%`;
+  } else $("tDiff").textContent = "bir tam salınım bekleniyor";
+  $("formulaLive").textContent = `T = 2π √(${P.L.toFixed(2)} / ${P.g.toFixed(2)}) = ${T.toFixed(3)} s`;
+}
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+
+// frame the bench so it fits narrow (phone) and wide screens
+const introFrom = new THREE.Spherical(), introTo = new THREE.Spherical();
+function frameCamera() {
+  const aspect = stage.clientWidth / Math.max(stage.clientHeight, 1);
+  const desktop = innerWidth > 1080;
+  const dist = aspect < 0.85 ? 6.2 : aspect < 1.3 ? 5.4 : 5.2;
+  controls.target.set(-0.15, desktop ? 1.15 : 1.45, 0);
+  camera.position.set(0.75, desktop ? 1.85 : 1.95, dist);
+  controls.update();
+  introTo.setFromVector3(tmp.copy(camera.position).sub(controls.target));
+  introFrom.copy(introTo);
+  introFrom.theta += 0.75;
+  introFrom.radius *= 1.3;
+}
+
+/* ---------- loop ---------- */
+syncOutputs();
+resize();
+frameCamera();
+release(P.theta0);
+let last = performance.now();
+let traceTimer = 0;
+let intro = reduceMotion ? 1 : 0;
+controls.addEventListener("start", () => { intro = 1; });
+const sph = new THREE.Spherical();
+function frame(now) {
+  // rAF timestamps can predate the last performance.now() on the first frame
+  const real = THREE.MathUtils.clamp((now - last) / 1000, 0, 1 / 20);
+  last = now;
+  if (P.running && !P.dragging) {
+    const sim = real * P.timeScale;
+    const sub = Math.max(1, Math.ceil(sim / 0.002));
+    for (let i = 0; i < sub; i++) stepPhysics(sim / sub);
+    traceTimer += sim;
+    if (traceTimer > 1 / 60) { traceTimer = 0; traceData.push([P.t, P.theta / DEG]); if (traceData.length > 1200) traceData.shift(); }
+  }
+  if (intro < 1) {
+    intro = Math.min(1, intro + real / 2.2);
+    const k = 1 - Math.pow(1 - intro, 3);
+    sph.set(
+      THREE.MathUtils.lerp(introFrom.radius, introTo.radius, k),
+      THREE.MathUtils.lerp(introFrom.phi, introTo.phi, k),
+      THREE.MathUtils.lerp(introFrom.theta, introTo.theta, k));
+    camera.position.setFromSpherical(sph).add(controls.target);
+  }
+  controls.update();
+  updateScene();
+  if (P.running && !P.dragging) trail.push(bobPos);
+  updateReadouts();
+  drawTrace();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+</script>
+</body>
+</html>
