@@ -211,7 +211,8 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius
 .legend .w { color: var(--pot); }
 .legend .r { color: var(--brass); }
 .legend .v { color: var(--kin); }
-.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font: 500 13px var(--font-data); z-index: 0; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); font: 500 13px/1.5 var(--font-data); z-index: 1; }
+.loading.error { color: var(--kin); }
 
 /* phones and small tablets: stage on top, panels flow below */
 .stage-title { display: none; }
@@ -327,16 +328,37 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius
   </section>
 </div>
 
-<script type="importmap">
-{ "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-} }
+<script>
+// If the 3D scene cannot start, say why instead of leaving "hazırlanıyor" on screen.
+(function () {
+  var failed = false;
+  function fail(msg) {
+    // the first error is the cause; later ones are its consequences
+    if (window.__fizmoReady || failed) return;
+    failed = true;
+    var el = document.getElementById("loading");
+    if (el) { el.textContent = "3B sahne açılamadı: " + msg; el.classList.add("error"); }
+  }
+  window.__fizmoFail = fail;
+  window.addEventListener("error", function (e) {
+    var src = e.target && e.target.src;
+    fail(src ? src.split("/").slice(-1)[0] + " indirilemedi. Bağlantını kontrol edip sayfayı yenile." : (e.message || "bilinmeyen hata"));
+  }, true);
+  setTimeout(function () {
+    fail(typeof THREE === "undefined" ? "Three.js indirilemedi. Bağlantını kontrol edip sayfayı yenile." : "başlatma çok uzun sürdü.");
+  }, 15000);
+})();
 </script>
-<script type="module">
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script>
+(() => {
+"use strict";
+try {
+const { OrbitControls, RoomEnvironment } = THREE;
+// hex colors are sRGB; lights use physical units
+THREE.ColorManagement.legacyMode = false;
 
 const $ = (id) => document.getElementById(id);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -402,16 +424,17 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.2;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.physicallyCorrectLights = true;
 stage.appendChild(renderer.domElement);
-$("loading").remove();
 
 const scene = new THREE.Scene();
 const inkColor = new THREE.Color(css("--ink"));
 scene.background = inkColor;
 scene.fog = new THREE.Fog(inkColor, 9, 20);
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 50);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -444,7 +467,7 @@ grid.position.y = 0.002;
 scene.add(grid);
 
 // lab stand
-const metal = new THREE.MeshStandardMaterial({ color: 0x9aa7b6, metalness: 0.85, roughness: 0.32 });
+const metal = new THREE.MeshStandardMaterial({ color: 0x9aa7b6, metalness: 0.85, roughness: 0.32, envMapIntensity: 1.4 });
 const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2a3442, metalness: 0.6, roughness: 0.45 });
 const base = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 0.7), darkMetal);
 base.position.set(-0.55, 0.04, -0.15); base.castShadow = base.receiveShadow = true;
@@ -496,7 +519,7 @@ const stringGeo = new THREE.BufferGeometry().setFromPoints([PIVOT.clone(), PIVOT
 const string = new THREE.Line(stringGeo, new THREE.LineBasicMaterial({ color: 0xd8dde4 }));
 scene.add(string);
 const brass = new THREE.Color(css("--brass"));
-const bobMat = new THREE.MeshStandardMaterial({ color: brass, metalness: 1, roughness: 0.22, emissive: brass, emissiveIntensity: 0 });
+const bobMat = new THREE.MeshStandardMaterial({ color: brass, metalness: 1, roughness: 0.22, emissive: brass, emissiveIntensity: 0, envMapIntensity: 1.6 });
 const bob = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), bobMat);
 bob.castShadow = true;
 scene.add(bob);
@@ -860,9 +883,14 @@ function frame(now) {
   updateReadouts();
   drawTrace();
   renderer.render(scene, camera);
+  if (!window.__fizmoReady) { window.__fizmoReady = true; $("loading")?.remove(); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+} catch (err) {
+  window.__fizmoFail(err && err.message ? err.message : String(err));
+}
+})();
 
 </script>
 </body>
